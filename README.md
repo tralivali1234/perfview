@@ -1,4 +1,4 @@
-# PerfView OverView
+# PerfView Overview
 PerfView is a free performance-analysis tool that helps isolate CPU and memory-related performance issues.  It is a Windows tool, but it also has some support for analyzing data collected on Linux machines.  It works for a wide variety of scenarios, but has a number of special features for investigating performance issues in code written for the .NET runtime.  
 
 If you are unfamiliar with PerfView, there are [PerfView video tutorials](http://channel9.msdn.com/Series/PerfView-Tutorial). 
@@ -8,6 +8,10 @@ started information.
 ### Getting PerfView 
 Please see the [PerfView Download Page](documentation/Downloading.md) for the link and instructions for downloading the 
 current version of PerfView.  
+
+### Are you here about the TraceEvent Library?
+
+PerfView is built on a library called Microsoft.Diagnostics.Tracing.TraceEvent, that knows how to both collect and parse Event Tracing for Windows (ETW) data.   Thus if there is any information that PerfView collects and processes that you would like to manipulate yourself programmatically, you would probably be interested in the [TraceEvent Library Documentation](documentation/TraceEvent/TraceEventLibrary.md)
 
 ### Learning about PerfView 
 
@@ -25,7 +29,7 @@ called 'question' that you should use as well that marks your issue as a questio
 If the question is is specific to a particular trace (*.ETL.ZIP file) you can drag that file onto the issue and it will be downloaded.
 This allows those watching for issues to reproduce your environment and give much more detailed and useful answer.
 
-Note that once you have your question answered, if the issue is likley to be common, you should strongly consider updating the
+Note that once you have your question answered, if the issue is likely to be common, you should strongly consider updating the
 documentation to include the information.  The documentation is pretty much just
 one file https://github.com/Microsoft/perfview/blob/master/src/PerfView/SupportFiles/UsersGuide.htm.
 You will need to clone the repository and create a pull request (see [OpenSourceGitWorkflow](https://github.com/Microsoft/perfview/blob/master/documentation/OpenSourceGitWorkflow.md)
@@ -33,21 +37,6 @@ for instructions for setting up and creating a pull request.
 
 Reporting bugs works pretty much the same way as asking a question.  It is very likely that you will want to include the *.ETL.ZIP
 file needed to reproduce the problem as well as any steps and the resulting undesirable behavior.
-
-### Developer information
-
-This repository uses [AppVeyor](https://www.appveyor.com/) to automatically build and test pull requests, which allows
-the community to easily view build results. Code coverage is provided by [codecov.io](https://codecov.io). The build and
-coverage status reflected here is the AppVeyor build status of the **master** branch.
-
-[![Build status](https://ci.appveyor.com/api/projects/status/fxtu3xa874whk2w0?svg=true)](https://ci.appveyor.com/project/sharwell/perfview)
-
-[![codecov](https://codecov.io/gh/Microsoft/perfview/branch/master/graph/badge.svg)](https://codecov.io/gh/Microsoft/perfview)
-
-> :warning: Builds produced by AppVeyor are not considered official builds of PerfView, and are not signed or otherwise
-> validated for safety or security in any way. This build integration is provided as a convenience for community
-> participants, but is not endorsed by Microsoft nor is it considered an official release channel in any way. For
-> information about official builds, see the [PerfView Download Page](documentation/Downloading.md) page.
 
 # Building PerfView Yourself
 
@@ -59,19 +48,27 @@ you can do that by following the rest of these instructions.
 
 ### Tools Needed to Build PerfView
 
-The only tool you need to build PerfView is Visual Studio 2017.   The [Visual Studio 2017 Community Edition](https://www.visualstudio.com/vs/community/)
-can be downloaded *for free* and has everything you need to fetch PerfView from GitHub, build and test it. We expect you
+The only tools you need to build PerfView are Visual Studio 2017 and the .NET Core SDK.   The
+[Visual Studio 2017 Community Edition](https://www.visualstudio.com/vs/community/) can be downloaded *for free* and,
+along with the .NET Core SDK, has everything you need to fetch PerfView from GitHub, build and test it. We expect you
 to download Visual Studio 2017 Community Edition if you don't already have Visual Studio 2017.
 
 PerfView is mostly C# code, however there is a small amount of C++ code to implement some advanced features of PerfView 
-(The ETWCLrProfiler dlls that allow PerfView to intercept the .NET Method calls; see .NET Call in the Collect dialog).  If you downloaded the Visual Studio 2017 Community Edition, it does not install the C++ compilation tools by default,
+(The ETWCLrProfiler dlls that allow PerfView to intercept the .NET Method calls; see .NET Call in the Collect dialog).  
+If you downloaded the Visual Studio 2017 Community Edition, it does not install the C++ compilation tools by default,
 but VS should detect that the solution needs C++ and ask you to install those tools when you open the solution. Allow it
 to do this and everything should 'just work'.    
 
+You may need to install some VS optional components, such as the Windows 8.1 SDK and the "Windows Universal CRT SDK"
+(*not* the "Windows Universal C Runtime").
+
+The .NET Core SDK is unfortunately not currently an optional component of the Visual Studio Installer, but can be
+installed easily from [here](https://www.microsoft.com/net/download/windows).
+
 ### Cloning the PerfView GitHub Repository. 
 
-The first step in getting started with the PerfView source code is to clone the PerfView GitHub respository.
-If you are already familiar with how GIT, GitHub, and Visual Studio 2017 GIT support works, than you can skip this section.
+The first step in getting started with the PerfView source code is to clone the PerfView GitHub repository.
+If you are already familiar with how GIT, GitHub, and Visual Studio 2017 GIT support works, then you can skip this section.
 However, if not, the [Setting up a Local GitHub repository with Visual Studio 2017](documentation/SettingUpRepoInVS.md) document
 will lead you through the basics of doing this.   All it assumes is that you have Visual Studio 2017 installed.
 
@@ -129,6 +126,21 @@ need to run these tests with a Debug build of the product (see the text window i
 If tests fail you can right click on the failed test and select the 'Debug' context menu item to run the test under 
 the debugger to figure out what went wrong.  
 
+### Check in testing and code coverage statistica
+
+This repository uses [AppVeyor](https://www.appveyor.com/) to automatically build and test pull requests, which allows
+the community to easily view build results. Code coverage is provided by [codecov.io](https://codecov.io). The build and
+coverage status reflected here is the AppVeyor build status of the **master** branch.
+
+[![Build status](https://ci.appveyor.com/api/projects/status/fxtu3xa874whk2w0?svg=true)](https://ci.appveyor.com/project/sharwell/perfview)
+
+[![codecov](https://codecov.io/gh/Microsoft/perfview/branch/master/graph/badge.svg)](https://codecov.io/gh/Microsoft/perfview)
+
+> :warning: Builds produced by AppVeyor are not considered official builds of PerfView, and are not signed or otherwise
+> validated for safety or security in any way. This build integration is provided as a convenience for community
+> participants, but is not endorsed by Microsoft nor is it considered an official release channel in any way. For
+> information about official builds, see the [PerfView Download Page](documentation/Downloading.md) page.\
+
 ### Contributing to PerfView 
 
 You can get a lot of value out of the source code base simply by being able to build the code yourself, debug
@@ -159,19 +171,6 @@ The code is broken into several main sections:
   * CSVReader - old code that lets PerfView read .ETL.CSV files generated by XPERF (probably will delete)
   * Zip - a clone of System.IO.Compression.dll so that PerfView can run on pre V4.5 runtimes (probably will delete)
   * [HtmlJs](src/HtmlJs/Readme.md) - contains a version of the GUI based on HTML and JavaScript (for Linux support). (experimental)
-
-# The TraceEvent Library (Nuget Package)
-
-PerfView is built on top of a stand alone Nuget package called Microsoft.Diagnostics.Tracing (or TraceEvent for short).
-You can download it from [Nuget's TraceEvent page](https://www.nuget.org/packages/Microsoft.Diagnostics.Tracing.TraceEvent/) or
-by using the Nuget tool or visual studio to reference the package.  
-
-This package does most of the hard work of creating and parsing the event data generated by the operating system
-and organizing it in interesting ways.   PerfView can be thought of as a GUI veneer over this library.   Thus
-if you had need to do automated monitoring or want to use the data you see in PerfView in ways that don't make
-sense as an extension to PerfView, you can use the TraceEvent library to do this. 
-
-See the [TraceEvent Library Documentation](documentation/TraceEvent/TraceEventLibrary.md) for more.
 
 ### Other Documentation
 

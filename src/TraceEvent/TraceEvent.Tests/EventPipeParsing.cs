@@ -3,6 +3,7 @@ using Microsoft.Diagnostics.Tracing.Etlx;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -159,12 +160,18 @@ namespace TraceEventTests
 
                     // the EVENTID for SetActivityId is 25 https://github.com/dotnet/coreclr/blob/c67c29d6e226e4cca1f1efb4d57b7f498d58b534/src/mscorlib/src/System/Threading/Tasks/TPLETWProvider.cs#L524
                     if (@event.ProviderName != TplEtwProviderTraceEventParser.ProviderName || @event.ID != (TraceEventID)25)
+                    {
                         return;
+                    }
 
                     Assert.False(activityIdHasBeenSet); // make sure the event comes only once
 
-                    if (@event.PayloadByName("NewId").Equals(ExpectedActivityId))
+                    // Sneak in a test of the DLR support here (casting to 'dynamic'
+                    // instead of using PayloadByName("NewId")):
+                    if (((dynamic)@event).NewId.Equals(ExpectedActivityId))
+                    {
                         activityIdHasBeenSet = true;
+                    }
                 };
 
                 traceSource.Process();
@@ -190,6 +197,9 @@ namespace TraceEventTests
                 string eventStatisticsFile = Path.Combine(TestDataDir, eventPipeFileName + ".actual.txt");
                 File.WriteAllText(eventStatisticsFile, actual, Encoding.UTF8);
 
+                Output.WriteLine($"Baseline File: {baselineFile}");
+                Output.WriteLine($"Actual File: {eventStatisticsFile}");
+                Output.WriteLine($"To Diff: windiff {baselineFile} {eventStatisticsFile}");
                 Assert.True(false, $"The event statistics doesn't match {Path.GetFullPath(baselineFile)}. It's saved in {Path.GetFullPath(eventStatisticsFile)}.");
             }
         }
