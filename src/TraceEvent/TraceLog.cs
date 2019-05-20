@@ -408,6 +408,13 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
         /// This property returns true if this happened.  
         /// </summary>
         public bool Truncated { get { return truncated; } }
+
+        /// <summary>
+        /// Returns the EvnetIndex (order in the file) of the first event that has a 
+        /// timestamp smaller than its predecessor.  Returns Invalid if there are no time inversions. 
+        /// </summary>
+        public EventIndex FirstTimeInversion { get { return firstTimeInversion; } }
+
         /// <summary>
         /// Returns all the TraceEventParsers associated with this log.  
         /// </summary>
@@ -512,6 +519,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
             osBuild = "";
             sampleProfileInterval100ns = 10000;    // default is 1 msec
             fnAddAddressToCodeAddressMap = AddAddressToCodeAddressMap;
+            firstTimeInversion = EventIndex.Invalid;
         }
 
         /// <summary>
@@ -1711,15 +1719,15 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
             clrPrivate.GCBGC1stConStop += delegate (GCNoUserDataTraceData data) { MarkAsBGCThread(data); };
             clrPrivate.GCBGCDrainMark += delegate (BGCDrainMarkTraceData data) { MarkAsBGCThread(data); };
             clrPrivate.GCBGCRevisit += delegate (BGCRevisitTraceData data) { MarkAsBGCThread(data); };
-            rawEvents.Clr.ThreadPoolWorkerThreadStart += delegate (ThreadPoolWorkerThreadTraceData data) { CategorizeThread(data, ".NET ThreadPool"); };
             rawEvents.Clr.ThreadPoolWorkerThreadAdjustmentSample += delegate (ThreadPoolWorkerThreadAdjustmentSampleTraceData data)
             {
                 CategorizeThread(data, ".NET ThreadPool");
             };
+            rawEvents.Clr.ThreadPoolIODequeue += delegate (ThreadPoolIOWorkTraceData data) { CategorizeThread(data, ".NET IO ThreadPool Worker", true); };
 
             var fxParser = new FrameworkEventSourceTraceEventParser(rawEvents);
-            fxParser.ThreadPoolDequeueWork += delegate (ThreadPoolDequeueWorkArgs data) { CategorizeThread(data, ".NET ThreadPool"); };
-            fxParser.ThreadTransferReceive += delegate (ThreadTransferReceiveArgs data) { CategorizeThread(data, ".NET ThreadPool"); };
+            fxParser.ThreadPoolDequeueWork += delegate (ThreadPoolDequeueWorkArgs data) { CategorizeThread(data, ".NET ThreadPool Worker"); };
+            fxParser.ThreadTransferReceive += delegate (ThreadTransferReceiveArgs data) { CategorizeThread(data, ".NET ThreadPool Worker"); };
 
             // Attribute CPU samples to processes.
             kernelParser.PerfInfoSample += delegate (SampledProfileTraceData data)
@@ -1927,6 +1935,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
                 {
                     options.ConversionLog.WriteLine("WARNING, events out of order! This breaks event search.  Jumping from {0:n3} back to {1:n3} for {2} EventID {3} Thread {4}",
                         QPCTimeToRelMSec(lastQPCEventTime), data.TimeStampRelativeMSec, data.ProviderName, data.ID, data.ThreadID);
+                    firstTimeInversion = (EventIndex) (uint) eventCount;
                 }
 
                 lastQPCEventTime = data.TimeStampQPC;
@@ -1991,7 +2000,11 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
                 {
                     TraceProcess process = processes.GetOrCreateProcess(data.ProcessID, data.TimeStampQPC);
                     if (data.ThreadID != -1)
-                        thread = Threads.GetOrCreateThread(data.ThreadID, data.TimeStampQPC, process, data.Opcode == TraceEventOpcode.Start || data.Opcode == TraceEventOpcode.DataCollectionStart);
+                    {
+                        // All Thread events should already be handled (since we are passing the wrong args for those here).  
+                        Debug.Assert(!(data is ThreadTraceData));
+                        thread = Threads.GetOrCreateThread(data.ThreadID, data.TimeStampQPC, process);
+                    }
                 }
 
                 if (numberOnPage >= eventsPerPage)
@@ -2873,7 +2886,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
         /// <summary>
         /// Put the thread that owns 'data' in to the category 'category.  
         /// </summary>
-        private void CategorizeThread(TraceEvent data, string category)
+        private void CategorizeThread(TraceEvent data, string category, bool overwrite=false)
         {
             if (string.IsNullOrWhiteSpace(category))
             {
@@ -2886,7 +2899,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
                 return;
             }
 
-            if (thread.threadInfo == null)
+            if (thread.threadInfo == null || overwrite)
             {
                 thread.threadInfo = category;
             }
@@ -3568,6 +3581,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
             serializer.Log("</WriteCollection>\r\n");
 
             serializer.Write(truncated);
+            serializer.Write((int) firstTimeInversion);
         }
         void IFastSerializable.FromStream(Deserializer deserializer)
         {
@@ -3723,10 +3737,11 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
                 relatedActivityIDs.Add(guid);
             }
             deserializer.Read(out truncated);
+            firstTimeInversion = (EventIndex) (uint) deserializer.ReadInt();
         }
         int IFastSerializableVersion.Version
         {
-            get { return 71; }
+            get { return 72; }
         }
         int IFastSerializableVersion.MinimumVersionCanRead
         {
@@ -3756,6 +3771,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
         private long bootTime100ns;     // This is a windows FILETIME object 
         private bool hasPdbInfo;
         private bool truncated;     // stopped because the file was too large.  
+        private EventIndex firstTimeInversion;
         private int sampleProfileInterval100ns;
         private string machineName;
         private TraceProcesses processes;
@@ -7103,7 +7119,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
         /// <summary>
         /// The Assembly ID that the .NET Runtime uses to identify the assembly associated with this managed module. 
         /// </summary>
-        public long AssmeblyID { get { return assemblyID; } }
+        public long AssemblyID { get { return assemblyID; } }
         /// <summary>
         /// Returns true if the managed module was loaded AppDOmain Neutral (its code can be shared by all appdomains in the process. 
         /// </summary>
@@ -7125,7 +7141,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
 
             return "<TraceManagedModule " +
                    "ModuleID=" + XmlUtilities.XmlQuoteHex((ulong)ModuleID) + " " +
-                   "AssmeblyID=" + XmlUtilities.XmlQuoteHex((ulong)AssmeblyID) + ">\r\n" +
+                   "AssemblyID=" + XmlUtilities.XmlQuoteHex((ulong)AssemblyID) + ">\r\n" +
                    "  " + base.ToString() + "\r\n" +
                    nativeInfo +
                    "</TraceManagedModule>";
@@ -10537,6 +10553,20 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
             }
             return log.GetCodeAddressIndexAtEvent(anEvent.InstructionPointer, anEvent);
         }
+
+        /// <summary>
+        /// For a SysCallEnterTraceData event, gets the CodeAddressIndex associated with the SysCallAddress address. 
+        /// </summary>
+        public static CodeAddressIndex SysCallAddress(this SysCallEnterTraceData anEvent)
+        {
+            TraceLog log = anEvent.Source as TraceLog;
+            if (null == log)
+            {
+                throw new InvalidOperationException("Attempted to use TraceLog support on a non-TraceLog TraceEventSource.");
+            }
+            return log.GetCodeAddressIndexAtEvent(anEvent.SysCallAddress, anEvent);
+        }
+
 
         /// <summary>
         /// For a PMCCounterProfTraceData event, gets the TraceCodeAddress associated with the InstructionPointer address. 
